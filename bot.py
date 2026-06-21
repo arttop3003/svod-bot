@@ -11,6 +11,17 @@ TOKEN = "8246510815:AAF77G8ScTm1WNhSLbv5amdYik3eH_IkB5o"
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 DB_PATH = "reports.db"
 
+# Белый список Telegram user_id — только эти пользователи могут получать сводку.
+# Узнать свой ID: написать боту команду /id
+# Оставьте список пустым [] чтобы снять ограничение
+ALLOWED_USER_IDS = []
+
+
+def is_allowed(user_id):
+    if not ALLOWED_USER_IDS:
+        return True
+    return user_id in ALLOWED_USER_IDS
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
@@ -241,8 +252,25 @@ def send_daily_summary():
 
 # ── Обработчики команд ─────────────────────────────────────────────────────────
 
+@bot.message_handler(commands=["id"])
+def cmd_id(message):
+    bot.reply_to(message,
+        f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n\n"
+        "Сообщите этот номер администратору — он добавит вас в список получателей сводки.",
+        parse_mode="HTML"
+    )
+
+
 @bot.message_handler(commands=["start"])
 def cmd_start(message):
+    if not is_allowed(message.from_user.id):
+        bot.reply_to(message,
+            "⛔ У вас нет доступа к этому боту.\n\n"
+            "Ваш ID: <code>{}</code>\n"
+            "Сообщите его администратору для получения доступа.".format(message.from_user.id),
+            parse_mode="HTML"
+        )
+        return
     name = f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip()
     add_boss(message.chat.id, message.from_user.username, name)
     bot.reply_to(message,
@@ -257,6 +285,9 @@ def cmd_start(message):
 
 @bot.message_handler(commands=["svod"])
 def cmd_svod(message):
+    if not is_allowed(message.from_user.id):
+        bot.reply_to(message, "⛔ У вас нет доступа к этому боту.")
+        return
     reports = get_today_reports()
     date = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
     text = build_summary(reports, date)
@@ -265,6 +296,9 @@ def cmd_svod(message):
 
 @bot.message_handler(commands=["help"])
 def cmd_help(message):
+    if not is_allowed(message.from_user.id):
+        bot.reply_to(message, "⛔ У вас нет доступа к этому боту.")
+        return
     bot.reply_to(message,
         "📖 <b>Как пользоваться ботом:</b>\n\n"
         "1. Добавь бота в чаты где руководители присылают отчёты\n"
